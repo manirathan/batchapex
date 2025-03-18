@@ -1,0 +1,161 @@
+
+Example 1: Update Opportunities with a Specific Stage
+This example updates all Opportunities with a specific stage (e.g., "Prospecting") to a new stage (e.g., "Closed Won").
+
+public class UpdateOpportunityStageBatch implements Database.Batchable<SObject> {
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+        // Query all Opportunities with stage "Prospecting"
+        return Database.getQueryLocator('SELECT Id, StageName FROM Opportunity WHERE StageName = \'Prospecting\'');
+    }
+
+    public void execute(Database.BatchableContext bc, List<Opportunity> scope) {
+        // Update the stage to "Closed Won"
+        for (Opportunity opp : scope) {
+            opp.StageName = 'Closed Won';
+        }
+        update scope;
+    }
+
+    public void finish(Database.BatchableContext bc) {
+        System.debug('Batch job completed: Opportunities updated to Closed Won.');
+    }
+}
+=========================================================================================
+Example 2: Delete Old Records
+This example deletes records older than a specific date (e.g., records created more than 2 years ago).
+
+public class DeleteOldRecordsBatch implements Database.Batchable<SObject> {
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+        // Query records older than 2 years
+        Date twoYearsAgo = Date.today().addYears(-2);
+        return Database.getQueryLocator('SELECT Id FROM Account WHERE CreatedDate < :twoYearsAgo');
+    }
+
+    public void execute(Database.BatchableContext bc, List<Account> scope) {
+        // Delete the records
+        delete scope;
+    }
+
+    public void finish(Database.BatchableContext bc) {
+        System.debug('Batch job completed: Old records deleted.');
+    }
+}
+=========================================================================================
+
+Example 3: Send Email Notifications
+This example sends an email notification to the owner of each Account that meets a specific condition (e.g., no Contacts associated with the Account).
+
+public class NotifyAccountOwnersBatch implements Database.Batchable<SObject> {
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+        // Query Accounts with no associated Contacts
+        return Database.getQueryLocator('SELECT Id, Name, OwnerId FROM Account WHERE Id NOT IN (SELECT AccountId FROM Contact)');
+    }
+
+    public void execute(Database.BatchableContext bc, List<Account> scope) {
+        List<Messaging.SingleEmailMessage> emails = new List<Messaging.SingleEmailMessage>();
+
+        for (Account acc : scope) {
+            // Create an email for the Account owner
+            Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+            email.setToAddresses(new String[]{acc.OwnerId});
+            email.setSubject('Account Without Contacts: ' + acc.Name);
+            email.setPlainTextBody('The Account ' + acc.Name + ' has no associated Contacts. Please review.');
+            emails.add(email);
+        }
+
+        // Send all emails
+        Messaging.sendEmail(emails);
+    }
+
+    public void finish(Database.BatchableContext bc) {
+        System.debug('Batch job completed: Email notifications sent.');
+    }
+}
+============================================================================
+Example 4: Update Related Records
+This example updates all Contacts related to Accounts in a specific industry (e.g., "Technology").
+
+public class UpdateRelatedContactsBatch implements Database.Batchable<SObject> {
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+        // Query Contacts related to Accounts in the "Technology" industry
+        return Database.getQueryLocator('SELECT Id, AccountId, Description FROM Contact WHERE Account.Industry = \'Technology\'');
+    }
+
+    public void execute(Database.BatchableContext bc, List<Contact> scope) {
+        // Update the Contact Description
+        for (Contact con : scope) {
+            con.Description = 'This Contact is associated with a Technology Account.';
+        }
+        update scope;
+    }
+
+    public void finish(Database.BatchableContext bc) {
+        System.debug('Batch job completed: Related Contacts updated.');
+    }
+}
+======================================================
+Example 5: Chaining Batch Jobs
+This example demonstrates how to chain multiple Batch Apex jobs together. The first job updates Accounts, and the second job updates related Contacts.
+
+apex
+Copy
+// First Batch Job: Update Accounts
+public class UpdateAccountsBatch implements Database.Batchable<SObject> {
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+        return Database.getQueryLocator('SELECT Id, Name FROM Account');
+    }
+
+    public void execute(Database.BatchableContext bc, List<Account> scope) {
+        for (Account acc : scope) {
+            acc.Name = acc.Name + ' - Updated';
+        }
+        update scope;
+    }
+
+    public void finish(Database.BatchableContext bc) {
+        // Chain the next batch job
+        Database.executeBatch(new UpdateRelatedContactsBatch());
+    }
+}
+
+// Second Batch Job: Update Related Contacts
+public class UpdateRelatedContactsBatch implements Database.Batchable<SObject> {
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+        return Database.getQueryLocator('SELECT Id, AccountId, Description FROM Contact');
+    }
+
+    public void execute(Database.BatchableContext bc, List<Contact> scope) {
+        for (Contact con : scope) {
+            con.Description = 'This Contact is associated with an updated Account.';
+        }
+        update scope;
+    }
+
+    public void finish(Database.BatchableContext bc) {
+        System.debug('Chained batch job completed: Related Contacts updated.');
+    }
+}
+=========================================================================================
+Example 6: Aggregate Data Using Batch Apex
+This example calculates the total number of Contacts for each Account and updates a custom field (Total_Contacts__c) on the Account.
+
+apex
+Copy
+public class CalculateTotalContactsBatch implements Database.Batchable<SObject> {
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+        // Query all Accounts
+        return Database.getQueryLocator('SELECT Id, (SELECT Id FROM Contacts) FROM Account');
+    }
+
+    public void execute(Database.BatchableContext bc, List<Account> scope) {
+        for (Account acc : scope) {
+            // Calculate the number of related Contacts
+            acc.Total_Contacts__c = acc.Contacts.size();
+        }
+        update scope;
+    }
+
+    public void finish(Database.BatchableContext bc) {
+        System.debug('Batch job completed: Total Contacts calculated and updated.');
+    }
+}
